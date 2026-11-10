@@ -480,10 +480,8 @@ bot.hears('🛒 Catálogo', async (ctx) => {
         return ctx.reply('🛍️ <b>Catálogo:</b> No hay productos registrados.', { parse_mode: 'HTML' });
     }
 
-    // 1. Enviamos primero el encabezado asegurando que aparezca arriba
     await ctx.reply('🛍️ <b>Catálogo de Servicios y Cuentas Disponibles:</b>', { parse_mode: 'HTML' });
 
-    // 2. Iteramos los productos debajo de manera sincronizada
     for (const p of products) {
         const stockCount = p.stock ? p.stock.length : 0;
         let stockEstado = stockCount > 0 ? `🟢 ${stockCount} disponibles` : `🔴 AGOTADO`;
