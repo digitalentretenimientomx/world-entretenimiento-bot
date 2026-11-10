@@ -1,0 +1,115 @@
+[
+  {
+    "id": "prod_1794177642871",
+    "name": "📱Disney Plus+  Perfil",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "5332394707655869572"
+      }
+    ],
+    "price": "2.00 USDT",
+    "durationDays": 30,
+    "stock": [
+      "heldo_32.br@platonuma.com:Cleveland26"
+    ],
+    "isProfile": false
+  },
+  {
+    "id": "prod_1794198503018",
+    "name": "🎥 Hbo Max Perfil 30 Dias",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "4947230007714907018"
+      }
+    ],
+    "price": "1.5 USDT",
+    "durationDays": 30,
+    "stock": [
+      "max6288@worldtvmx.com:Browns2620"
+    ],
+    "isProfile": false
+  },
+  {
+    "id": "prod_1794199145550",
+    "name": "📺Netflix Premium 30 Dias",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "5366477429223209600"
+      },
+      {
+        "offset": 2,
+        "length": 23,
+        "type": "bold"
+      }
+    ],
+    "price": "3.00 USDT",
+    "durationDays": 30,
+    "isProfile": true,
+    "stock": [
+      "marikrognes66@yarift.com:Bengals26 | 1 | 0000"
+    ]
+  },
+  {
+    "id": "prod_1794266056741",
+    "name": "🎬Perfil Extra Netflix 30 Dias",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "6253620598002419613"
+      }
+    ],
+    "price": "4.5 USDT",
+    "durationDays": 30,
+    "isProfile": true,
+    "stock": [
+      "marcelino_sz_st@extramember.co:INICAR CON CODIGO DE INICIO |1|1384"
+    ]
+  },
+  {
+    "id": "prod_1794266148776",
+    "name": "📱Spotify 30 Dias",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "5346074681004801565"
+      }
+    ],
+    "price": "2.00 USDT",
+    "durationDays": 30,
+    "isProfile": true,
+    "stock": [
+      "honda936.ar@worldtvmx.com:Browns2620"
+    ]
+  },
+  {
+    "id": "prod_1794266427821",
+    "name": "📺Crunchy Roll Perfil",
+    "entities": [
+      {
+        "offset": 0,
+        "length": 2,
+        "type": "custom_emoji",
+        "custom_emoji_id": "4958988936681620024"
+      }
+    ],
+    "price": "1.5 USDT",
+    "durationDays": 30,
+    "isProfile": true,
+    "stock": [
+      "crun-inr01@worldtvmx.com:Cleveland26"
+    ]
+  }
+]
