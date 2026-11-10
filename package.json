@@ -1,4 +1,10 @@
 {
+  "name": "world-entretenimiento-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "dotenv": "^18.0.9",
     "telegraf": "^4.16.3"
