@@ -2,15 +2,24 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 
-// Inicializar Firebase Firestore con la variable de entorno de Railway
+// Inicialización segura y validada de Firebase Firestore
 if (!admin.apps.length) {
     try {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+        let serviceAccount;
+        if (process.env.FIREBASE_CONFIG) {
+            const rawConfig = process.env.FIREBASE_CONFIG.trim();
+            serviceAccount = JSON.parse(rawConfig);
+        } else {
+            throw new Error("La variable de entorno FIREBASE_CONFIG no está definida en Railway.");
+        }
+
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
+        console.log('🔥 Firebase inicializado correctamente.');
     } catch (error) {
-        console.error('Error al inicializar Firebase:', error);
+        console.error('❌ Error crítico al inicializar Firebase:', error.message);
+        process.exit(1);
     }
 }
 const db = admin.firestore();
@@ -235,7 +244,7 @@ bot.hears('📜 Historial', async (ctx) => {
     ctx.reply(mensaje, { parse_mode: 'HTML' });
 });
 
-// --- BOTÓN: 📖 GUÍAS DE USO (Dinámicas) ---
+// --- BOTÓN: 📖 GUÍAS DE USO ---
 bot.hears('📖 Guías de Uso', async (ctx) => {
     const guides = await getGuides();
     const keys = Object.keys(guides);
@@ -387,7 +396,7 @@ bot.action(/^responder_codigo_(.+)$/, async (ctx) => {
     ctx.reply('✍️ Escribe el <b>enlace, código o mensaje</b> que se enviará al cliente:', { parse_mode: 'HTML' });
 });
 
-// --- BOTÓN: 🛠️ SOPORTE TÉCNICO ---
+// --- SOPORTE TÉCNICO Y CLIENTE ---
 bot.hears('🛠️ Soporte Técnico', (ctx) => {
     const userId = ctx.from.id;
     clientState[userId] = { step: 'waiting_support_account' };
@@ -403,7 +412,6 @@ bot.hears('🛠️ Soporte Técnico', (ctx) => {
     );
 });
 
-// --- BOTÓN: 🛠️ SOPORTE AL CLIENTE ---
 bot.hears('🛠️ Soporte al Cliente', (ctx) => {
     const userId = ctx.from.id;
     clientState[userId] = { step: 'support_menu' };
@@ -966,7 +974,6 @@ bot.on(['text', 'photo'], async (ctx) => {
                                  `📊 Stock total ahora: <b>${prod.stock.length}</b>\n\n` +
                                  `Toca abajo para conseguir el tuyo antes de que se agote.`;
 
-                // Notificar a usuarios desde Firestore
                 const usersSnap = await db.collection('users').get();
                 usersSnap.forEach(docSnap => {
                     bot.telegram.sendMessage(docSnap.id, alertMsg, {
