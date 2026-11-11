@@ -2,15 +2,19 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 
-// Inicialización segura y validada de Firebase Firestore
+// Inicialización de Firebase con respaldo directo
 if (!admin.apps.length) {
     try {
         let serviceAccount;
         if (process.env.FIREBASE_CONFIG) {
-            const rawConfig = process.env.FIREBASE_CONFIG.trim();
+            let rawConfig = process.env.FIREBASE_CONFIG.trim();
+            // Limpieza por si Railway añade comillas extra o caracteres escapados al inicio/final
+            if (rawConfig.startsWith('"') && rawConfig.endsWith('"')) {
+                rawConfig = rawConfig.slice(1, -1);
+            }
             serviceAccount = JSON.parse(rawConfig);
         } else {
-            throw new Error("La variable de entorno FIREBASE_CONFIG no está definida en Railway.");
+            throw new Error("Falta la variable FIREBASE_CONFIG en Railway.");
         }
 
         admin.initializeApp({
@@ -1301,6 +1305,7 @@ setInterval(async () => {
             let cambios = false;
 
             if (user.purchases && Array.isArray(user.purchases)) {
+                user.purchases.pages?.forEach(p => {}); // Safe traversal
                 user.purchases.forEach(p => {
                     const restante = p.expirationDate - ahora;
                     if (restante > 0 && restante <= 2 * 24 * 60 * 60 * 1000 && !p.notified) {
