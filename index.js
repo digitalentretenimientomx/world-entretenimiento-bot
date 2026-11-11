@@ -1,115 +1,146 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-const fs = require('fs');
+const admin = require('firebase-admin');
+
+// Inicializar Firebase Firestore con la variable de entorno de Railway
+if (!admin.apps.length) {
+    try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+        admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount)
+        });
+    } catch (error) {
+        console.error('Error al inicializar Firebase:', error);
+    }
+}
+const db = admin.firestore();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-
 const ADMIN_ID = 1120012272;
-const PRODUCTS_FILE = './products.json';
-const USERS_FILE = './users.json';
-const GUIDES_FILE = './guides.json';
 
 const adminState = {};
 const clientState = {};
 
-function getProducts() {
-    if (!fs.existsSync(PRODUCTS_FILE)) {
-        const initialProducts = [
-            { 
-                id: 'capcut', 
-                name: '🎬 CapCut Pro 30 Days', 
-                entities: [],
-                price: '1.82 USDT', 
-                durationDays: 30,
-                isProfile: false,
-                stock: ['correo1@gmail.com:pass123'] 
-            }
-        ];
-        fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(initialProducts, null, 2));
-        return initialProducts;
-    }
+// --- FUNCIONES DE BASE DE DATOS (FIRESTORE) ---
+
+async function getProducts() {
     try {
-        const data = JSON.parse(fs.readFileSync(PRODUCTS_FILE, 'utf8'));
-        return data.map(p => ({
-            ...p,
-            entities: p.entities || [],
-            durationDays: p.durationDays || 30,
-            isProfile: p.isProfile || false,
-            stock: Array.isArray(p.stock) ? p.stock : []
-        }));
+        const snapshot = await db.collection('products').get();
+        if (snapshot.empty) {
+            const initialProducts = [
+                { 
+                    id: 'capcut', 
+                    name: '🎬 CapCut Pro 30 Days', 
+                    entities: [],
+                    price: '1.82 USDT', 
+                    durationDays: 30,
+                    isProfile: false,
+                    stock: ['correo1@gmail.com:pass123'] 
+                }
+            ];
+            for (const p of initialProducts) {
+                await db.collection('products').doc(p.id).set(p);
+            }
+            return initialProducts;
+        }
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (e) {
+        console.error('Error obteniendo productos:', e);
         return [];
     }
 }
 
-function saveProducts(products) {
-    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
-}
-
-function getUsers() {
-    if (!fs.existsSync(USERS_FILE)) {
-        fs.writeFileSync(USERS_FILE, JSON.stringify({}, null, 2));
-        return {};
-    }
+async function saveProduct(product) {
     try {
-        return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+        await db.collection('products').doc(product.id).set(product);
     } catch (e) {
-        return {};
+        console.error('Error guardando producto:', e);
     }
 }
 
-function saveUsers(users) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
-function getGuides() {
-    if (!fs.existsSync(GUIDES_FILE)) {
-        const initialGuides = {
-            netflix: { title: '📺 Guía de Netflix', content: '1. Entra a Netflix.\n2. Usa tu correo, perfil y PIN asignado.\n3. Disfruta.' },
-            capcut: { title: '🎬 Guía de CapCut Pro', content: '1. Abre CapCut.\n2. Inicia sesión con la cuenta.\n3. Edita sin marca de agua.' }
-        };
-        fs.writeFileSync(GUIDES_FILE, JSON.stringify(initialGuides, null, 2));
-        return initialGuides;
-    }
+async function deleteProduct(productId) {
     try {
-        return JSON.parse(fs.readFileSync(GUIDES_FILE, 'utf8'));
+        await db.collection('products').doc(productId).delete();
     } catch (e) {
-        return {};
+        console.error('Error eliminando producto:', e);
     }
 }
 
-function saveGuides(guides) {
-    fs.writeFileSync(GUIDES_FILE, JSON.stringify(guides, null, 2));
-}
-
-function getUserData(userId, firstName = 'Usuario') {
-    const users = getUsers();
-    if (!users[userId]) {
+async function getUserData(userId, firstName = 'Usuario') {
+    try {
+        const userRef = db.collection('users').doc(String(userId));
+        const doc = await userRef.get();
         const fechaActual = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
-        users[userId] = { 
-            name: firstName,
-            joinDate: fechaActual,
-            balance: 0, 
-            purchases: [],
-            history: []
-        };
-        saveUsers(users);
-    } else {
-        if (!users[userId].joinDate) {
-            users[userId].joinDate = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+
+        if (!doc.exists) {
+            const newUser = {
+                name: firstName,
+                joinDate: fechaActual,
+                balance: 0,
+                purchases: [],
+                history: []
+            };
+            await userRef.set(newUser);
+            return newUser;
+        } else {
+            const data = doc.data();
+            let updates = {};
+            if (!data.joinDate) {
+                updates.joinDate = fechaActual;
+            }
+            if (!data.history) {
+                updates.history = [];
+            }
+            if (Object.keys(updates).length > 0) {
+                await userRef.update(updates);
+                Object.assign(data, updates);
+            }
+            return data;
         }
-        if (!users[userId].history) {
-            users[userId].history = [];
-        }
-        saveUsers(users);
+    } catch (e) {
+        console.error('Error obteniendo usuario:', e);
+        return { name: firstName, balance: 0, purchases: [], history: [] };
     }
-    return users[userId];
 }
 
-bot.start((ctx) => {
+async function saveUserData(userId, userData) {
+    try {
+        await db.collection('users').doc(String(userId)).set(userData, { merge: true });
+    } catch (e) {
+        console.error('Error guardando usuario:', e);
+    }
+}
+
+async function getGuides() {
+    try {
+        const doc = await db.collection('settings').doc('guides').get();
+        if (!doc.exists) {
+            const initialGuides = {
+                netflix: { title: '📺 Guía de Netflix', content: '1. Entra a Netflix.\n2. Usa tu correo, perfil y PIN asignado.\n3. Disfruta.' },
+                capcut: { title: '🎬 Guía de CapCut Pro', content: '1. Abre CapCut.\n2. Inicia sesión con la cuenta.\n3. Edita sin marca de agua.' }
+            };
+            await db.collection('settings').doc('guides').set(initialGuides);
+            return initialGuides;
+        }
+        return doc.data();
+    } catch (e) {
+        console.error('Error obteniendo guías:', e);
+        return {};
+    }
+}
+
+async function saveGuides(guides) {
+    try {
+        await db.collection('settings').doc('guides').set(guides);
+    } catch (e) {
+        console.error('Error guardando guías:', e);
+    }
+}
+
+bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const firstName = ctx.from.first_name || 'Usuario';
-    getUserData(userId, firstName);
+    await getUserData(userId, firstName);
 
     let keyboard = [
         ['🛒 Catálogo', '📦 Mis Compras'],
@@ -133,9 +164,9 @@ bot.start((ctx) => {
 });
 
 // --- BOTÓN: 👤 MI PERFIL ---
-bot.hears('👤 Mi Perfil', (ctx) => {
+bot.hears('👤 Mi Perfil', async (ctx) => {
     const userId = ctx.from.id;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
 
     const totalPedidos = userData.purchases ? userData.purchases.length : 0;
     const totalGastado = userData.purchases ? userData.purchases.reduce((acc, p) => {
@@ -148,8 +179,8 @@ bot.hears('👤 Mi Perfil', (ctx) => {
         `──────────────────\n` +
         `🌐 <b>Cliente:</b> ${userData.name}\n` +
         `🆔 <b>ID:</b> <code>${userId}</code>\n` +
-        `📅 <b>Miembro desde:</b> ${userData.joinDate}\n` +
-        `👛 <b>Saldo actual:</b> <code>${userData.balance.toFixed(2)} USDT</code>\n` +
+        `📅 <b>Miembro desde:</b> ${userData.joinDate || 'N/A'}\n` +
+        `👛 <b>Saldo actual:</b> <code>${(userData.balance || 0).toFixed(2)} USDT</code>\n` +
         `──────────────────\n` +
         `📦 <b>Pedidos totales:</b> ${totalPedidos}\n` +
         `💰 <b>Total gastado:</b> <code>${totalGastado.toFixed(2)} USDT</code>`;
@@ -158,9 +189,9 @@ bot.hears('👤 Mi Perfil', (ctx) => {
 });
 
 // --- BOTÓN: 📦 MIS COMPRAS ---
-bot.hears('📦 Mis Compras', (ctx) => {
+bot.hears('📦 Mis Compras', async (ctx) => {
     const userId = ctx.from.id;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
 
     if (!userData.purchases || userData.purchases.length === 0) {
         return ctx.reply('📦 No tienes productos activos o compras registradas en este momento.');
@@ -185,9 +216,9 @@ bot.hears('📦 Mis Compras', (ctx) => {
 });
 
 // --- BOTÓN: 📜 HISTORIAL ---
-bot.hears('📜 Historial', (ctx) => {
+bot.hears('📜 Historial', async (ctx) => {
     const userId = ctx.from.id;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
 
     if (!userData.history || userData.history.length === 0) {
         return ctx.reply('📜 No tienes transacciones registradas en tu historial.');
@@ -205,8 +236,8 @@ bot.hears('📜 Historial', (ctx) => {
 });
 
 // --- BOTÓN: 📖 GUÍAS DE USO (Dinámicas) ---
-bot.hears('📖 Guías de Uso', (ctx) => {
-    const guides = getGuides();
+bot.hears('📖 Guías de Uso', async (ctx) => {
+    const guides = await getGuides();
     const keys = Object.keys(guides);
 
     if (keys.length === 0) {
@@ -225,7 +256,7 @@ bot.hears('📖 Guías de Uso', (ctx) => {
 bot.action(/^show_guide_(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery(); } catch (e) {}
     const guideKey = ctx.match[1];
-    const guides = getGuides();
+    const guides = await getGuides();
     const guide = guides[guideKey];
 
     if (!guide) return ctx.reply('❌ Guía no encontrada.');
@@ -243,7 +274,7 @@ bot.action(/^show_guide_(.+)$/, async (ctx) => {
 
 bot.action('volver_guias', async (ctx) => {
     try { await ctx.answerCbQuery(); } catch (e) {}
-    const guides = getGuides();
+    const guides = await getGuides();
     const keys = Object.keys(guides);
     const buttons = keys.map(key => [Markup.button.callback(guides[key].title, `show_guide_${key}`)]);
     buttons.push([Markup.button.callback('🔙 Volver al Menú', 'cancelar_proceso')]);
@@ -255,8 +286,8 @@ bot.action('volver_guias', async (ctx) => {
 });
 
 // --- BOTÓN: 🔑 SOLICITAR CÓDIGO ---
-bot.hears('🔑 Solicitar Código', (ctx) => {
-    const products = getProducts();
+bot.hears('🔑 Solicitar Código', async (ctx) => {
+    const products = await getProducts();
     if (products.length === 0) return ctx.reply('⚠️ No hay plataformas configuradas.');
 
     const buttons = products.map(p => [Markup.button.callback(p.name, `req_code_prod_${p.id}`)]);
@@ -271,7 +302,7 @@ bot.hears('🔑 Solicitar Código', (ctx) => {
 bot.action(/^req_code_prod_(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery(); } catch (e) {}
     const productId = ctx.match[1];
-    const products = getProducts();
+    const products = await getProducts();
     const product = products.find(p => p.id === productId);
 
     if (!product) return ctx.reply('❌ Plataforma no encontrada.');
@@ -414,11 +445,11 @@ bot.hears('🔄 Renovar', (ctx) => {
     });
 });
 
-bot.hears('💳 Mi Saldo', (ctx) => {
+bot.hears('💳 Mi Saldo', async (ctx) => {
     const userId = ctx.from.id;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
     ctx.reply(
-        `💳 <b>Tu Saldo Actual:</b> <code>${userData.balance.toFixed(2)} USDT</code>\n\n¿Qué acción deseas realizar?`,
+        `💳 <b>Tu Saldo Actual:</b> <code>${(userData.balance || 0).toFixed(2)} USDT</code>\n\n¿Qué acción deseas realizar?`,
         {
             parse_mode: 'HTML',
             ...Markup.inlineKeyboard([
@@ -473,9 +504,9 @@ bot.action('cancelar_proceso', async (ctx) => {
     ctx.reply('🔙 Operación cancelada. Selecciona una opción del menú principal.');
 });
 
-// --- CATÁLOGO (CON ENCABEZADO ORDENADO ARRIBA) ---
+// --- CATÁLOGO ---
 bot.hears('🛒 Catálogo', async (ctx) => {
-    const products = getProducts();
+    const products = await getProducts();
     if (products.length === 0) {
         return ctx.reply('🛍️ <b>Catálogo:</b> No hay productos registrados.', { parse_mode: 'HTML' });
     }
@@ -506,7 +537,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery(); } catch (e) {}
     const userId = ctx.from.id;
     const productId = ctx.match[1];
-    const products = getProducts();
+    const products = await getProducts();
     const product = products.find(prod => prod.id === productId);
 
     if (!product || !product.stock || product.stock.length === 0) {
@@ -514,11 +545,11 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     }
 
     const precioNumerico = parseFloat(product.price.replace(/[^0-9.]/g, '')) || 0;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
 
     if (userData.balance < precioNumerico) {
         return ctx.reply(
-            `❌ <b>Saldo Insuficiente</b>\n\nCuesta <b>${product.price}</b> y tu saldo es <code>${userData.balance.toFixed(2)} USDT</code>.`,
+            `❌ <b>Saldo Insuficiente</b>\n\nCuesta <b>${product.price}</b> y tu saldo es <code>${(userData.balance || 0).toFixed(2)} USDT</code>.`,
             {
                 parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([[Markup.button.callback('➕ Recargar Saldo', 'recargar_saldo')]])
@@ -528,7 +559,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
 
     userData.balance -= precioNumerico;
     const deliveredItem = product.stock.shift(); 
-    saveProducts(products); 
+    await saveProduct(product); 
 
     let emailAcceso = deliveredItem;
     let perfilNombre = null;
@@ -546,6 +577,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
     const fechaVencimiento = new Date();
     fechaVencimiento.setDate(fechaCompra.getDate() + diasVigencia);
 
+    if (!userData.purchases) userData.purchases = [];
     userData.purchases.push({
         email: emailAcceso,
         profileName: perfilNombre,
@@ -557,6 +589,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
         notified: false
     });
 
+    if (!userData.history) userData.history = [];
     userData.history.push({
         tipo: 'COMPRA',
         detalle: product.name,
@@ -564,9 +597,7 @@ bot.action(/^buy_(.+)$/, async (ctx) => {
         fecha: fechaCompra.toLocaleDateString('es-MX')
     });
 
-    const users = getUsers();
-    users[userId] = userData;
-    saveUsers(users);
+    await saveUserData(userId, userData);
 
     let mensajeExito = `✅ <b>¡Compra Exitosa!</b>\n\n` +
                        `Servicio: ${product.name}\n` +
@@ -625,7 +656,7 @@ bot.action('guide_add', async (ctx) => {
 bot.action('guide_list', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
-    const guides = getGuides();
+    const guides = await getGuides();
     const keys = Object.keys(guides);
     if (keys.length === 0) return ctx.reply('No hay guías registradas.');
 
@@ -648,9 +679,9 @@ bot.action(/^del_guide_(.+)$/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
     const gKey = ctx.match[1];
-    const guides = getGuides();
+    const guides = await getGuides();
     delete guides[gKey];
-    saveGuides(guides);
+    await saveGuides(guides);
     ctx.reply('✅ Guía eliminada.');
 });
 
@@ -664,7 +695,7 @@ bot.action('admin_manual_assign', async (ctx) => {
 bot.action('admin_list', async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
-    const products = getProducts();
+    const products = await getProducts();
     if (products.length === 0) return ctx.reply('No hay productos registrados.');
     const buttons = products.map(p => [
         Markup.button.callback(`✏️ ${p.name.substring(0, 12)}`, `edit_${p.id}`),
@@ -715,7 +746,7 @@ bot.action(/^edstock_(.+)$/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
     const productId = ctx.match[1];
-    const products = getProducts();
+    const products = await getProducts();
     const prod = products.find(p => p.id === productId);
     if (!prod) return ctx.reply('⚠️ Producto no encontrado.');
 
@@ -744,7 +775,7 @@ bot.action(/^delstock_list_(.+)$/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
     const productId = ctx.match[1];
-    const products = getProducts();
+    const products = await getProducts();
     const prod = products.find(p => p.id === productId);
 
     if (!prod || !prod.stock || prod.stock.length === 0) {
@@ -768,12 +799,12 @@ bot.action(/^del_single_(.+)_(.+)$/, async (ctx) => {
     const productId = ctx.match[1];
     const indexToDelete = parseInt(ctx.match[2]);
 
-    let products = getProducts();
+    const products = await getProducts();
     const prod = products.find(p => p.id === productId);
 
     if (prod && prod.stock && prod.stock[indexToDelete] !== undefined) {
         const eliminado = prod.stock.splice(indexToDelete, 1);
-        saveProducts(products);
+        await saveProduct(prod);
         return ctx.reply(`✅ Cuenta eliminada correctamente del stock:\n<code>${eliminado}</code>`, { parse_mode: 'HTML' });
     }
 
@@ -783,9 +814,7 @@ bot.action(/^del_single_(.+)_(.+)$/, async (ctx) => {
 bot.action(/^del_(.+)$/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
-    let products = getProducts();
-    products = products.filter(p => p.id !== ctx.match[1]);
-    saveProducts(products);
+    await deleteProduct(ctx.match[1]);
     ctx.reply('✅ Producto eliminado.');
 });
 
@@ -819,18 +848,17 @@ bot.action(/^aprobar_recarga_(.+)$/, async (ctx) => {
     if (ctx.from.id !== ADMIN_ID) return;
     try { await ctx.answerCbQuery(); } catch(e){}
     const targetUserId = Number(ctx.match[1]);
-    const users = getUsers();
-    if (!users[targetUserId]) users[targetUserId] = { balance: 0, purchases: [], history: [] };
+    const userData = await getUserData(targetUserId, 'Cliente');
     const montoAcreditar = clientState[targetUserId]?.amount || 5.00;
-    users[targetUserId].balance += montoAcreditar;
-    if (!users[targetUserId].history) users[targetUserId].history = [];
-    users[targetUserId].history.push({
+    userData.balance = (userData.balance || 0) + montoAcreditar;
+    if (!userData.history) userData.history = [];
+    userData.history.push({
         tipo: 'RECARGA',
         detalle: 'Acreditación saldo USDT',
         monto: `+${montoAcreditar.toFixed(2)} USDT`,
         fecha: new Date().toLocaleDateString('es-MX')
     });
-    saveUsers(users);
+    await saveUserData(targetUserId, userData);
     ctx.reply(`✅ Recarga aprobada. Acreditados ${montoAcreditar.toFixed(2)} USDT.`);
     bot.telegram.sendMessage(targetUserId, `🎉 <b>¡Recarga aprobada!</b>\nSe acreditaron <code>${montoAcreditar.toFixed(2)} USDT</code>.`, { parse_mode: 'HTML' });
     delete clientState[targetUserId];
@@ -853,7 +881,7 @@ bot.action(/^responder_soporte_(.+)$/, async (ctx) => {
 });
 
 // --- CAPTURA DE TEXTO GENERAL ---
-bot.on(['text', 'photo'], (ctx) => {
+bot.on(['text', 'photo'], async (ctx) => {
     const userId = ctx.from.id;
     const text = ctx.message.text;
 
@@ -881,18 +909,18 @@ bot.on(['text', 'photo'], (ctx) => {
         }
 
         if (state.step === 'waiting_guide_content' && text) {
-            const guides = getGuides();
+            const guides = await getGuides();
             guides[state.guideKey] = { title: state.guideTitle, content: text.trim() };
-            saveGuides(guides);
+            await saveGuides(guides);
             delete adminState[ADMIN_ID];
             return ctx.reply('✅ ¡Guía de uso guardada y publicada con éxito!');
         }
 
         if (state.step === 'waiting_guide_new_content' && text) {
-            const guides = getGuides();
+            const guides = await getGuides();
             if (guides[state.guideKey]) {
                 guides[state.guideKey].content = text.trim();
-                saveGuides(guides);
+                await saveGuides(guides);
             }
             delete adminState[ADMIN_ID];
             return ctx.reply('✅ ¡Guía actualizada con éxito!');
@@ -909,7 +937,7 @@ bot.on(['text', 'photo'], (ctx) => {
             const targetId = Number(text.trim());
             if (isNaN(targetId)) return ctx.reply('⚠️ Ingresa un ID válido.');
             state.targetUserId = targetId;
-            const products = getProducts();
+            const products = await getProducts();
             if (products.length === 0) return ctx.reply('⚠️ No hay productos.');
             const buttons = products.map(p => [Markup.button.callback(`${p.name} (${p.price})`, `manual_prod_${p.id}`)]);
             return ctx.reply('📦 Selecciona el producto a asignar:', Markup.inlineKeyboard(buttons));
@@ -924,12 +952,12 @@ bot.on(['text', 'photo'], (ctx) => {
 
         if (state.step === 'waiting_add_more_stock' && text) {
             const newItems = text.split('\n').map(i => i.trim()).filter(i => i.length > 0);
-            let products = getProducts();
+            const products = await getProducts();
             const prod = products.find(p => p.id === state.productId);
             if (prod) {
                 if (!Array.isArray(prod.stock)) prod.stock = [];
                 prod.stock.push(...newItems);
-                saveProducts(products);
+                await saveProduct(prod);
                 delete adminState[ADMIN_ID];
 
                 const alertMsg = `🔔 <b>¡Actualización de stock!</b>\n\n` +
@@ -938,13 +966,14 @@ bot.on(['text', 'photo'], (ctx) => {
                                  `📊 Stock total ahora: <b>${prod.stock.length}</b>\n\n` +
                                  `Toca abajo para conseguir el tuyo antes de que se agote.`;
 
-                const users = getUsers();
-                for (const uId in users) {
-                    bot.telegram.sendMessage(uId, alertMsg, {
+                // Notificar a usuarios desde Firestore
+                const usersSnap = await db.collection('users').get();
+                usersSnap.forEach(docSnap => {
+                    bot.telegram.sendMessage(docSnap.id, alertMsg, {
                         parse_mode: 'HTML',
                         ...Markup.inlineKeyboard([[Markup.button.callback('🛒 Comprar ahora', '🛒 Catálogo')]])
                     }).catch(() => {});
-                }
+                });
 
                 return ctx.reply(`✅ Se agregaron ${newItems.length} unidades y se notificó a todos los usuarios.`);
             }
@@ -953,34 +982,34 @@ bot.on(['text', 'photo'], (ctx) => {
         }
 
         if (state.step === 'waiting_new_name' && text) {
-            let products = getProducts();
+            const products = await getProducts();
             const prod = products.find(p => p.id === state.productId);
             if (prod) {
                 prod.name = text.trim();
                 prod.entities = ctx.message.entities || [];
-                saveProducts(products);
+                await saveProduct(prod);
             }
             delete adminState[ADMIN_ID];
             return ctx.reply('✅ Nombre actualizado.');
         }
 
         if (state.step === 'waiting_new_price' && text) {
-            let products = getProducts();
+            const products = await getProducts();
             const prod = products.find(p => p.id === state.productId);
             if (prod) {
                 prod.price = text.trim();
-                saveProducts(products);
+                await saveProduct(prod);
             }
             delete adminState[ADMIN_ID];
             return ctx.reply('✅ Precio actualizado.');
         }
 
         if (state.step === 'waiting_new_days' && text) {
-            let products = getProducts();
+            const products = await getProducts();
             const prod = products.find(p => p.id === state.productId);
             if (prod) {
                 prod.durationDays = parseInt(text.trim()) || 30;
-                saveProducts(products);
+                await saveProduct(prod);
             }
             delete adminState[ADMIN_ID];
             return ctx.reply('✅ Duración actualizada.');
@@ -1010,7 +1039,7 @@ bot.on(['text', 'photo'], (ctx) => {
         }
         if (state.step === 'waiting_stock' && text) {
             const stockItems = text.split('\n').map(i => i.trim()).filter(i => i.length > 0);
-            const products = getProducts();
+            const products = await getProducts();
             
             const existingProduct = products.find(p => p.name.toLowerCase() === state.name.toLowerCase());
 
@@ -1020,7 +1049,7 @@ bot.on(['text', 'photo'], (ctx) => {
                 existingProduct.price = state.price;
                 existingProduct.durationDays = state.durationDays;
                 existingProduct.isProfile = state.isProfile;
-                saveProducts(products);
+                await saveProduct(existingProduct);
                 delete adminState[ADMIN_ID];
 
                 const alertMsg = `🔔 <b>¡Actualización de stock!</b>\n\n` +
@@ -1029,17 +1058,17 @@ bot.on(['text', 'photo'], (ctx) => {
                                  `📊 Stock total ahora: <b>${existingProduct.stock.length}</b>\n\n` +
                                  `Toca abajo para conseguir el tuyo antes de que se agote.`;
 
-                const users = getUsers();
-                for (const uId in users) {
-                    bot.telegram.sendMessage(uId, alertMsg, {
+                const usersSnap = await db.collection('users').get();
+                usersSnap.forEach(docSnap => {
+                    bot.telegram.sendMessage(docSnap.id, alertMsg, {
                         parse_mode: 'HTML',
                         ...Markup.inlineKeyboard([[Markup.button.callback('🛒 Comprar ahora', '🛒 Catálogo')]])
                     }).catch(() => {});
-                }
+                });
 
                 return ctx.reply(`✅ Se fusionó el producto existente: se agregaron ${stockItems.length} unidades al stock (Total: ${existingProduct.stock.length}) y se notificó a todos.`);
             } else {
-                products.push({
+                const newProd = {
                     id: 'prod_' + Date.now(),
                     name: state.name,
                     entities: state.entities || [],
@@ -1047,8 +1076,8 @@ bot.on(['text', 'photo'], (ctx) => {
                     durationDays: state.durationDays,
                     isProfile: state.isProfile,
                     stock: stockItems
-                });
-                saveProducts(products);
+                };
+                await saveProduct(newProd);
                 delete adminState[ADMIN_ID];
 
                 const alertMsg = `🔔 <b>¡Actualización de stock!</b>\n\n` +
@@ -1057,13 +1086,13 @@ bot.on(['text', 'photo'], (ctx) => {
                                  `📊 Stock total ahora: <b>${stockItems.length}</b>\n\n` +
                                  `Toca abajo para conseguir el tuyo antes de que se agote.`;
 
-                const users = getUsers();
-                for (const uId in users) {
-                    bot.telegram.sendMessage(uId, alertMsg, {
+                const usersSnap = await db.collection('users').get();
+                usersSnap.forEach(docSnap => {
+                    bot.telegram.sendMessage(docSnap.id, alertMsg, {
                         parse_mode: 'HTML',
                         ...Markup.inlineKeyboard([[Markup.button.callback('🛒 Comprar ahora', '🛒 Catálogo')]])
                     }).catch(() => {});
-                }
+                });
 
                 return ctx.reply(`✅ Nuevo producto agregado con ${stockItems.length} elementos y se notificó a todos los usuarios.`);
             }
@@ -1075,7 +1104,7 @@ bot.on(['text', 'photo'], (ctx) => {
 
         if (clientSt.step === 'waiting_renewal_email' && text) {
             clientSt.renewalEmail = text.trim();
-            const products = getProducts();
+            const products = await getProducts();
             const buttons = products.map(p => [Markup.button.callback(`${p.name} (${p.price})`, `renew_prod_${p.id}`)]);
             buttons.push([Markup.button.callback('🔙 Volver', 'cancelar_proceso')]);
             return ctx.reply('🔄 Selecciona el producto para renovar:', Markup.inlineKeyboard(buttons));
@@ -1168,11 +1197,12 @@ bot.action(/^manual_prod_(.+)$/, async (ctx) => {
     if (!adminData || !adminData.targetUserId) return ctx.reply('⚠️ Error de sesión.');
 
     const targetUserId = adminData.targetUserId;
-    const product = getProducts().find(p => p.id === ctx.match[1]);
+    const products = await getProducts();
+    const product = products.find(p => p.id === ctx.match[1]);
     if (!product || !product.stock || product.stock.length === 0) return ctx.reply('❌ Sin stock.');
 
     const deliveredItem = product.stock.shift();
-    saveProducts(getProducts());
+    await saveProduct(product);
 
     let emailAcceso = deliveredItem;
     let perfilNombre = null;
@@ -1185,11 +1215,12 @@ bot.action(/^manual_prod_(.+)$/, async (ctx) => {
         perfilPin = partes[2] || 'Sin PIN';
     }
 
-    const userData = getUserData(targetUserId, 'Cliente');
+    const userData = await getUserData(targetUserId, 'Cliente');
     const diasVigencia = product.durationDays || 30;
     const fechaVenc = new Date();
     fechaVenc.setDate(fechaVenc.getDate() + diasVigencia);
 
+    if (!userData.purchases) userData.purchases = [];
     userData.purchases.push({
         email: emailAcceso,
         profileName: perfilNombre,
@@ -1200,7 +1231,7 @@ bot.action(/^manual_prod_(.+)$/, async (ctx) => {
         expirationDate: fechaVenc.getTime(),
         notified: false
     });
-    saveUsers(getUsers());
+    await saveUserData(targetUserId, userData);
     delete adminState[ADMIN_ID];
 
     ctx.reply(`✅ Cuenta asignada al usuario ID: <code>${targetUserId}</code>`, { parse_mode: 'HTML' });
@@ -1217,11 +1248,12 @@ bot.action(/^manual_prod_(.+)$/, async (ctx) => {
 bot.action(/^renew_prod_(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery(); } catch (e) {}
     const userId = ctx.from.id;
-    const product = getProducts().find(prod => prod.id === ctx.match[1]);
+    const products = await getProducts();
+    const product = products.find(prod => prod.id === ctx.match[1]);
     if (!product) return ctx.reply('❌ No encontrado.');
 
     const precioNum = parseFloat(product.price.replace(/[^0-9.]/g, '')) || 0;
-    const userData = getUserData(userId, ctx.from.first_name);
+    const userData = await getUserData(userId, ctx.from.first_name);
 
     if (userData.balance < precioNum) {
         return ctx.reply(`❌ Saldo insuficiente. Cuesta <b>${product.price}</b>.`, {
@@ -1235,13 +1267,14 @@ bot.action(/^renew_prod_(.+)$/, async (ctx) => {
     const nuevaFecha = new Date();
     nuevaFecha.setDate(nuevaFecha.getDate() + dias);
 
+    if (!userData.history) userData.history = [];
     userData.history.push({
         tipo: 'RENOVACIÓN',
         detalle: product.name,
         monto: product.price,
         fecha: new Date().toLocaleDateString('es-MX')
     });
-    saveUsers(getUsers());
+    await saveUserData(userId, userData);
     delete clientState[userId];
 
     ctx.reply(
@@ -1250,32 +1283,40 @@ bot.action(/^renew_prod_(.+)$/, async (ctx) => {
     );
 });
 
-setInterval(() => {
-    const users = getUsers();
-    const ahora = Date.now();
-    let cambios = false;
+setInterval(async () => {
+    try {
+        const usersSnap = await db.collection('users').get();
+        const ahora = Date.now();
 
-    for (const userId in users) {
-        const user = users[userId];
-        if (user.purchases && Array.isArray(user.purchases)) {
-            user.purchases.forEach(p => {
-                const restante = p.expirationDate - ahora;
-                if (restante > 0 && restante <= 2 * 24 * 60 * 60 * 1000 && !p.notified) {
-                    p.notified = true;
-                    cambios = true;
-                    bot.telegram.sendMessage(
-                        userId,
-                        `⚠️ <b>¡Aviso de Vencimiento Próximo!</b>\nTu servicio de <b>${p.productName}</b> expira en menos de 2 días.`,
-                        {
-                            parse_mode: 'HTML',
-                            ...Markup.inlineKeyboard([[Markup.button.callback('🔄 Renovar Ahora', 'renovar_directo')]])
-                        }
-                    ).catch(() => {});
-                }
-            });
+        for (const docSnap of usersSnap.docs) {
+            const userId = docSnap.id;
+            const user = docSnap.data();
+            let cambios = false;
+
+            if (user.purchases && Array.isArray(user.purchases)) {
+                user.purchases.forEach(p => {
+                    const restante = p.expirationDate - ahora;
+                    if (restante > 0 && restante <= 2 * 24 * 60 * 60 * 1000 && !p.notified) {
+                        p.notified = true;
+                        cambios = true;
+                        bot.telegram.sendMessage(
+                            userId,
+                            `⚠️ <b>¡Aviso de Vencimiento Próximo!</b>\nTu servicio de <b>${p.productName}</b> expira en menos de 2 días.`,
+                            {
+                                parse_mode: 'HTML',
+                                ...Markup.inlineKeyboard([[Markup.button.callback('🔄 Renovar Ahora', 'renovar_directo')]])
+                            }
+                        ).catch(() => {});
+                    }
+                });
+            }
+            if (cambios) {
+                await saveUserData(userId, user);
+            }
         }
+    } catch (e) {
+        console.error('Error en intervalo de vencimientos:', e);
     }
-    if (cambios) saveUsers(users);
 }, 60 * 60 * 1000);
 
 bot.action('renovar_directo', async (ctx) => {
@@ -1286,7 +1327,7 @@ bot.action('renovar_directo', async (ctx) => {
 
 bot.launch();
 bot.telegram.setMyCommands([]).catch(() => {});
-console.log('🤖 Bot listo y operando correctamente...');
+console.log('🤖 Bot listo y operando correctamente con Firebase Firestore...');
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
