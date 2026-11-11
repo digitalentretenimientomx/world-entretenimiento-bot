@@ -2,16 +2,45 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 
-// Inicialización directa corrigiendo los saltos de la llave privada automáticamente
+// Inicialización directa infalible con la llave dividida por partes
 if (!admin.apps.length) {
     try {
-        const privateKeyRaw = `-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCgFwTUpxPLi3jB\nQPOxToCMpAKd3b6bTICSs2xLy4soPrOkmIS3CoQGMOmiPP3EoTOD9EOLXiQsLkoc\nH1N1efOddQiAJ4jlTfg8UOWA8nOiElBJIocmLgzTO2RYS+ZZWnEfWJxMJQ82095s\n56IJ/3oAKxxcW9e5uxUVHxvEausYVL1Fh/fJg2aKka61iiQ8xadPF+vYbkVMbnmm\nduO8bXnQBPyIRB/kXslayjLLGpBnQZt4oITlkgFLeIYMg0XGebyVs0hVXyck+k1i\n1oZCTYxEpOuSDe1eRYqhOHyP3trDDTNrUsixOqJyuplUE6cTNVep1OmzuTn3mWSU\nRKaGL/TZAgMBAAECggEAUABA1z4pO8IWlciuH1CCGAZMEnUCMBxych08xMHSaEmx\nP1NCmzAjmu5tirhc/pqqIkp6SJbCj9uQCG61J9NKJUkbduOK20B0CTxJ/H7svzTU\rz+Ud0Vy/kpDUoaXddanCkmfTcQFTtpg4F5+0O09HAFvOk5hRz0RA42YtDbUBkNk\nKcM14gRiVY32RrM6qPFdSAu9Po248ciCp11LPD1fFfKXXR5FF8Sbe8KnykKQJIHF\n53OGbRSKUEWnBW4Vp4pY8cEAUQm3/GeaW6WK1ltSq92emnFm1izxOU84mvIZB+BJ\nI/G6VP9EbxYWZm8AVSkjqKDrdPMz0Ena1ZT+hGOUSwKBgQDQS5KQymRYFUyYHZzR\nTfrI9hkZcc2qd4n9lV4G7InZqlgxbym0hhtlIkX2dr5cEwMxeYa8HyTODTc2HJv2\nxfxH9/2bi104h31AT4NEsaYOf+rX8AY5yvAozjpDteZna0Sw/7V83ZRr4Z5TvWdS\nMEX5wELORO/owa8U8XZ19fAHiwKBgQDEwSbjeK8kdGZge7R0cAd9L+QpLOfHkP9K\n256n55am+PhTzV/MbnU0h0K5RZx7T8758FToGn/C/kiiWgGabY1c0kD3sSt3Puvx\nthW1LqnGBjpzPvomKdhm8DBS3zHCOZ7AraqXF31KHBM6YRk0PSXBta3bDj7MvtKx\nKUPqdeYhqwKBgQC4X0x6sUuk1CWaOAwJELc9juikpyFfFLSmK8Kw6ksSyj+KclU+\nH768BFxdTrotEf8vmdxzRDX11ajbUvOSuakXoyFuvyti0DtD453T/lN4Xi3nueQo\n38M4u2LDcI1jWYXSDmX9Ar1PyMO2Z96+10/5Q/9eSZL6OgbZyOoMfAddBQKBgEoH\nKmyXsb4TlZljsefFZuvxIvVjEeoCYit2KmGePw6fyj8tnIe8X5jd83rl+BRlWMit\nZiTWI4/oQMfk+YlzAqcT7KHFJUd+gyO0kMJUxkfdfAx0e4X0ZJmGcYgctgoPx+1S\n6kZi7h7+JTXn5qXDA/u4Mauj1nkOqxNBJW6H4Yh1AoGANAxDfFbJp3OdcEMPActz\nMwjqjh/hyUptgo3N/YKV8sCBe1XG7GAwGHp1KkmyfYDQbHqBBI+J/4lFSrGWouts\nfqfxxXV+goWFlrw+sS2rldF2WHls8jHAlwWivOJPxVUnljr3Lgq43+32wVtSXJ+g\nk6/HRMbUJjJji5e8DFTFdnI=\n-----END PRIVATE KEY-----`;
+        const privateKey = [
+            "-----BEGIN PRIVATE KEY-----",
+            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCgFwTUpxPLi3jB",
+            "QPOxToCMpAKd3b6bTICSs2xLy4soPrOkmIS3CoQGMOmiPP3EoTOD9EOLXiQsLkoc",
+            "H1N1efOddQiAJ4jlTfg8UOWA8nOiElBJIocmLgzTO2RYS+ZZWnEfWJxMJQ82095s",
+            "56IJ/3oAKxxcW9e5uxUVHxvEausYVL1Fh/fJg2aKka61iiQ8xadPF+vYbkVMbnmm",
+            "duO8bXnQBPyIRB/kXslayjLLGpBnQZt4oITlkgFLeIYMg0XGebyVs0hVXyck+k1i",
+            "1oZCTYxEpOuSDe1eRYqhOHyP3trDDTNrUsixOqJyuplUE6cTNVep1OmzuTn3mWSU",
+            "RKaGL/TZAgMBAAECggEAUABA1z4pO8IWlciuH1CCGAZMEnUCMBxych08xMHSaEmx",
+            "P1NCmzAjmu5tirhc/pqqIkp6SJbCj9uQCG61J9NKJUkbduOK20B0CTxJ/H7svzTU",
+            "rz+Ud0Vy/kpDUoaXddanCkmfTcQFTtpg4F5+0O09HAFvOk5hRz0RA42YtDbUBkNk",
+            "KcM14gRiVY32RrM6qPFdSAu9Po248ciCp11LPD1fFfKXXR5FF8Sbe8KnykKQJIHF",
+            "53OGbRSKUEWnBW4Vp4pY8cEAUQm3/GeaW6WK1ltSq92emnFm1izxOU84mvIZB+BJ",
+            "I/G6VP9EbxYWZm8AVSkjqKDrdPMz0Ena1ZT+hGOUSwKBgQDQS5KQymRYFUyYHZzR",
+            "TfrI9hkZcc2qd4n9lV4G7InZqlgxbym0hhtlIkX2dr5cEwMxeYa8HyTODTc2HJv2",
+            "xfxH9/2bi104h31AT4NEsaYOf+rX8AY5yvAozjpDteZna0Sw/7V83ZRr4Z5TvWdS",
+            "MEX5wELORO/owa8U8XZ19fAHiwKBgQDEwSbjeK8kdGZge7R0cAd9L+QpLOfHkP9K",
+            "256n55am+PhTzV/MbnU0h0K5RZx7T8758FToGn/C/kiiWgGabY1c0kD3sSt3Puvx",
+            "thW1LqnGBjpzPvomKdhm8DBS3zHCOZ7AraqXF31KHBM6YRk0PSXBta3bDj7MvtKx",
+            "KUPqdeYhqwKBgQC4X0x6sUuk1CWaOAwJELc9juikpyFfFLSmK8Kw6ksSyj+KclU+",
+            "H768BFxdTrotEf8vmdxzRDX11ajbUvOSuakXoyFuvyti0DtD453T/lN4Xi3nueQo",
+            "38M4u2LDcI1jWYXSDmX9Ar1PyMO2Z96+10/5Q/9eSZL6OgbZyOoMfAddBQKBgEoH",
+            "KmyXsb4TlZljsefFZuvxIvVjEeoCYit2KmGePw6fyj8tnIe8X5jd83rl+BRlWMit",
+            "ZiTWI4/oQMfk+YlzAqcT7KHFJUd+gyO0kMJUxkfdfAx0e4X0ZJmGcYgctgoPx+1S",
+            "6kZi7h7+JTXn5qXDA/u4Mauj1nkOqxNBJW6H4Yh1AoGANAxDfFbJp3OdcEMPActz",
+            "Mwjqjh/hyUptgo3N/YKV8sCBe1XG7GAwGHp1KkmyfYDQbHqBBI+J/4lFSrGWouts",
+            "fqfxxXV+goWFlrw+sS2rldF2WHls8jHAlwWivOJPxVUnljr3Lgq43+32wVtSXJ+g",
+            "k6/HRMbUJjJji5e8DFTFdnI=",
+            "-----END PRIVATE KEY-----"
+        ].join('\n');
 
         const serviceAccount = {
             type: "service_account",
             project_id: "worldentretenimiento-botdb",
             private_key_id: "44796fd485f6cc7f5063eb198ede0cebe717247f",
-            private_key: privateKeyRaw.replace(/\\n/g, '\n'),
+            private_key: privateKey,
             client_email: "firebase-adminsdk-fbsvc@worldentretenimiento-botdb.iam.gserviceaccount.com",
             client_id: "114333200804892802228",
             auth_uri: "https://accounts.google.com/o/oauth2/auth",
@@ -24,7 +53,7 @@ if (!admin.apps.length) {
         admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
-        console.log('🔥 Firebase inicializado correctamente con llave reparada.');
+        console.log('🔥 Firebase inicializado correctamente.');
     } catch (error) {
         console.error('❌ Error crítico al inicializar Firebase:', error.message);
         process.exit(1);
@@ -380,7 +409,7 @@ bot.action('enviar_solicitud_codigo', async (ctx) => {
 
     delete clientState[userId];
 
-    ctx.editMessageText('✅ <b>¡Solicitud enviada!</b> El administrador ha recibido thy petición y te responderá en breve.', { parse_mode: 'HTML' });
+    ctx.editMessageText('✅ <b>¡Solicitud enviada!</b> El administrador ha recibido tu petición y te responderá en breve.', { parse_mode: 'HTML' });
 
     bot.telegram.sendMessage(
         ADMIN_ID,
